@@ -2,13 +2,13 @@ pipeline {
     agent any
 
     tools {
+        git 'DefaultGit'
         nodejs 'node20'                    
-        jdk 'jdk-17.0.10+7'         
+        jdk 'jdk-17'         
     }
 
-
     environment {
-        SONARQUBE_ENV = 'sonar-server'        // SonarQube server name in Jenkins config
+        SONARQUBE_ENV = 'sonar-server'  
         SONAR_TOKEN = credentials('sonarqube')
         DOCKER_CREDENTIALS_ID = 'vaishnavi2301'
     }
@@ -18,7 +18,9 @@ pipeline {
         stage('Clean Workspace') {
             steps {
                 cleanWs()
-                echo "✅ Workspace cleaned successfully"
+                script {
+                    echo "✅ Workspace cleaned successfully"
+                }
             }
             post {
                 failure {
@@ -29,8 +31,10 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git credentialsId: 'VAISHNAVIP0419', url: 'https://github.com/VAISHNAVIP0419/chatbot_app.git'
-                echo "✅ Code checked out from Git"
+                git branch: 'main', credentialsId: 'github-credentials', url: 'https://github.com/VAISHNAVIP0419/chatbot_app.git'
+                script {
+                    echo "✅ Code checked out from Git"
+                }
             }
             post {
                 failure {
@@ -41,8 +45,12 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'npm install'
-                echo "✅ Node dependencies installed"
+                dir('project') {
+                    sh 'npm install'
+                }
+                script {
+                    echo "✅ Node dependencies installed"
+                }
             }
             post {
                 failure {
@@ -53,14 +61,13 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh "sonar-scanner -Dsonar.projectKey=ChatBot-Application -Dsonar.sources=. -Dsonar.login=${SONAR_TOKEN}"
-                }
-                echo "✅ SonarQube analysis triggered"
-            }
-            post {
-                failure {
-                    echo "❌ SonarQube analysis failed"
+                script {
+                    withSonarQubeEnv('sonar-server') {
+                        def scannerHome = tool name: 'sonar-scanner-5'
+                        dir('project') {
+                            sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=ChatBot-Application -Dsonar.sources=. -Dsonar.login=${SONAR_TOKEN}"
+                        }
+                    }
                 }
             }
         }
@@ -70,7 +77,9 @@ pipeline {
                 timeout(time: 2, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
-                echo "✅ Quality gate passed"
+                script {
+                    echo "✅ Quality gate passed"
+                }
             }
             post {
                 failure {
@@ -79,10 +88,26 @@ pipeline {
             }
         }
 
+        stage('Update Dependency-Check DB') {
+            steps {
+                script {
+                    sh '/usr/local/bin/dependency-check.sh --updateonly --data $WORKSPACE/owasp-data'
+                    echo "✅ Dependency-Check database updated"
+                }
+            }
+            post {
+                failure {
+                    echo "❌ Failed to update Dependency-Check database"
+                }
+            }
+        }
+
         stage('OWASP Dependency Check') {
             steps {
-                sh 'dependency-check.sh --project ChatBot-Application --scan .'
-                echo "✅ OWASP dependency check completed"
+                script {
+                    sh '/usr/local/bin/dependency-check.sh --project ChatBot-Application --scan . --data $WORKSPACE/owasp-data --noupdate --disableYarnAudit'
+                    echo "✅ OWASP dependency check completed"
+                }
             }
             post {
                 failure {
@@ -94,10 +119,9 @@ pipeline {
         stage('Trivy FS Scan') {
             steps {
                 script {
-                    // File system scan for vulnerabilities
-                    sh 'trivy fs . > trivy-fs-report.txt'
+                    sh '/usr/local/bin/trivy fs . > trivy-fs-report.txt'
+                    echo "✅ Trivy file system scan completed, check trivy-fs-report.txt"
                 }
-                echo "✅ Trivy file system scan completed, check trivy-fs-report.txt"
             }
             post {
                 failure {
@@ -110,9 +134,11 @@ pipeline {
             steps {
                 script {
                     def image = "vaishnavi2301/chatbot-app:latest"
-                    sh "docker build -t ${image} ."
+                    dir('project') {
+                        sh "docker build -t ${image} ."
+                    }
+                    echo "✅ Docker image built"
                 }
-                echo "✅ Docker image built"
             }
             post {
                 failure {
@@ -126,11 +152,11 @@ pipeline {
                 script {
                     def image = "vaishnavi2301/chatbot-app:latest"
                     withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                        sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
                         sh "docker push ${image}"
                     }
+                    echo "✅ Docker image pushed to Docker Hub"
                 }
-                echo "✅ Docker image pushed to Docker Hub"
             }
             post {
                 failure {
@@ -143,10 +169,9 @@ pipeline {
             steps {
                 script {
                     def image = "vaishnavi2301/chatbot-app:latest"
-                    // Run Trivy image scan; adjust exit-code/flags as needed
                     sh "trivy image ${image} --exit-code 0 --severity HIGH,CRITICAL > trivy-image-report.txt"
+                    echo "✅ Trivy image scan completed, check trivy-image-report.txt"
                 }
-                echo "✅ Trivy image scan completed, check trivy-image-report.txt"
             }
             post {
                 failure {
@@ -158,12 +183,11 @@ pipeline {
         stage('Deploy to Container') {
             steps {
                 script {
-                    // Cleanup any existing container to avoid port conflict
+                    def image = "vaishnavi2301/chatbot-app:latest"
                     sh 'docker rm -f chatbot-app || true'
-                    // Deploy the new container
-                    sh 'docker run -d -p 80:80 --name chatbot-app vaishnavi2301/chatbot-app:latest'
+                    sh "docker run -d -p 80:80 --name chatbot-app ${image}"
+                    echo "✅ Application deployed in container"
                 }
-                echo "✅ Application deployed in container"
             }
             post {
                 failure {
@@ -182,4 +206,3 @@ pipeline {
         }
     }
 }
-
