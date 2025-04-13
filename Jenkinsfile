@@ -2,9 +2,10 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'node-20'      // Ensure this matches the Dockerfile's Node.js version
-        jdk 'jdk-17'
+        nodejs 'node20'                    
+        jdk 'jdk-17.0.10+7'         
     }
+
 
     environment {
         SONARQUBE_ENV = 'sonar-server'        // SonarQube server name in Jenkins config
