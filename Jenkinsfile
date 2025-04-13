@@ -8,8 +8,8 @@ pipeline {
 
     environment {
         SONARQUBE_ENV = 'sonar-server'        // SonarQube server name in Jenkins config
-        SONAR_TOKEN = credentials('sonar-token')
-        DOCKER_CREDENTIALS_ID = 'docker'
+        SONAR_TOKEN = credentials('sonarqube')
+        DOCKER_CREDENTIALS_ID = 'vaishnavi2301'
     }
 
     stages {
@@ -28,7 +28,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git credentialsId: 'your-git-creds-id', url: 'https://github.com/your-user/ChatBot-Application.git'
+                git credentialsId: 'VAISHNAVIP0419', url: 'https://github.com/VAISHNAVIP0419/chatbot_app.git'
                 echo "✅ Code checked out from Git"
             }
             post {
@@ -108,7 +108,7 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    def image = "your-dockerhub-username/chatbot-app:latest"
+                    def image = "vaishnavi2301/chatbot-app:latest"
                     sh "docker build -t ${image} ."
                 }
                 echo "✅ Docker image built"
@@ -123,7 +123,7 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
-                    def image = "your-dockerhub-username/chatbot-app:latest"
+                    def image = "vaishnavi2301/chatbot-app:latest"
                     withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                         sh "docker push ${image}"
@@ -141,7 +141,7 @@ pipeline {
         stage('Trivy Image Scan') {
             steps {
                 script {
-                    def image = "your-dockerhub-username/chatbot-app:latest"
+                    def image = "vaishnavi2301/chatbot-app:latest"
                     // Run Trivy image scan; adjust exit-code/flags as needed
                     sh "trivy image ${image} --exit-code 0 --severity HIGH,CRITICAL > trivy-image-report.txt"
                 }
@@ -160,7 +160,7 @@ pipeline {
                     // Cleanup any existing container to avoid port conflict
                     sh 'docker rm -f chatbot-app || true'
                     // Deploy the new container
-                    sh 'docker run -d -p 80:80 --name chatbot-app your-dockerhub-username/chatbot-app:latest'
+                    sh 'docker run -d -p 80:80 --name chatbot-app vaishnavi2301/chatbot-app:latest'
                 }
                 echo "✅ Application deployed in container"
             }
