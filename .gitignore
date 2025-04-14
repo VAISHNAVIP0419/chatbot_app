@@ -1,0 +1,8 @@
+# Ignore terraform generated directories
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# Node and build-related
+node_modules/
+dist/
