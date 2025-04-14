@@ -185,7 +185,7 @@ pipeline {
                 script {
                     def image = "vaishnavi2301/chatbot-app:latest"
                     sh 'docker rm -f chatbot-app || true'
-                    sh "docker run -d -p 80:80 --name chatbot-app ${image}"
+                    sh "docker run -d -p 3000:80 --name chatbot-app ${image}"
                     echo "✅ Application deployed in container"
                 }
             }
