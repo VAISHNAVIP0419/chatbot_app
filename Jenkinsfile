@@ -196,7 +196,25 @@ pipeline {
             }
         }
     }
+    
+    stage('Helm Deploy to EKS') {
+            steps {
+                script {
+                    sh '''
+                        helm upgrade --install chatbot-ui ./chatbot-app \
+                          --namespace chatbot --create-namespace
+                    '''
+                    echo "✅ Application deployed to EKS using Helm"
+                }
+            }
+            post {
+                failure {
+                    echo "❌ Helm deployment failed"
+                }
+            }
+        }
 
+    
     post {
         success {
             echo "🎉 Pipeline completed successfully!"
