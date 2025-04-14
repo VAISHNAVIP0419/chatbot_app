@@ -2,15 +2,15 @@ pipeline {
     agent any
 
     tools {
-        git 'DefaultGit'
-        nodejs 'node20'                    
-        jdk 'jdk-17'         
+        git 'Default'
+        nodejs 'node20'
+        jdk 'jdk-17'
     }
 
     environment {
-        SONARQUBE_ENV = 'sonar-server'  
-        SONAR_TOKEN = credentials('sonarqube')
-        DOCKER_CREDENTIALS_ID = 'vaishnavi2301'
+        SONARQUBE_ENV = 'sonar-server'
+        SONAR_TOKEN = credentials('sonar-token')
+        DOCKER_CREDENTIALS_ID = 'docker'
     }
 
     stages {
@@ -74,7 +74,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 2, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
                 script {
@@ -91,7 +91,7 @@ pipeline {
         stage('Update Dependency-Check DB') {
             steps {
                 script {
-                    sh '/usr/local/bin/dependency-check.sh --updateonly --data $WORKSPACE/owasp-data'
+                    sh '/usr/local/bin/dependency-check/bin/dependency-check.sh --updateonly --data $WORKSPACE/owasp-data'
                     echo "✅ Dependency-Check database updated"
                 }
             }
@@ -105,7 +105,7 @@ pipeline {
         stage('OWASP Dependency Check') {
             steps {
                 script {
-                    sh '/usr/local/bin/dependency-check.sh --project ChatBot-Application --scan . --data $WORKSPACE/owasp-data --noupdate --disableYarnAudit'
+                    sh '/usr/local/bin/dependency-check/bin/dependency-check.sh --project ChatBot-Application --scan . --data $WORKSPACE/owasp-data --noupdate --disableYarnAudit'
                     echo "✅ OWASP dependency check completed"
                 }
             }
@@ -119,7 +119,7 @@ pipeline {
         stage('Trivy FS Scan') {
             steps {
                 script {
-                    sh '/usr/local/bin/trivy fs . > trivy-fs-report.txt'
+                    sh '$(which trivy) fs .'
                     echo "✅ Trivy file system scan completed, check trivy-fs-report.txt"
                 }
             }
@@ -195,15 +195,13 @@ pipeline {
                 }
             }
         }
-    }
-    
-    stage('Helm Deploy to EKS') {
+
+        stage('Helm Deploy to EKS') {
             steps {
                 script {
                     sh '''
                         helm upgrade --install chatbot-app ./project/chatbot_app/helm/chatbot_chart \
                         --namespace chatbot --create-namespace
-
                     '''
                     echo "✅ Application deployed to EKS using Helm"
                 }
@@ -214,8 +212,8 @@ pipeline {
                 }
             }
         }
+    }
 
-    
     post {
         success {
             echo "🎉 Pipeline completed successfully!"
