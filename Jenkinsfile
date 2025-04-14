@@ -201,8 +201,9 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        helm upgrade --install chatbot-ui ./chatbot-app \
-                          --namespace chatbot --create-namespace
+                        helm upgrade --install chatbot-app ./project/chatbot_app/helm/chatbot_chart \
+                        --namespace chatbot --create-namespace
+
                     '''
                     echo "✅ Application deployed to EKS using Helm"
                 }
