@@ -23,6 +23,6 @@ output "oidc_provider_arn" {
 }
 
 # Optional: generate a kubeconfig update command
-# output "update_kubeconfig_command" {
-#   value = format("aws eks update-kubeconfig --name %s --region %s", module.eks.cluster_id, var.aws_region)
-# }
+output "update_kubeconfig_command" {
+  value = format("aws eks update-kubeconfig --name %s --region %s", module.eks.cluster_id, var.aws_region)
+}
