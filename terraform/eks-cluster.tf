@@ -6,9 +6,8 @@ module "eks" {
   subnet_ids      = data.aws_subnets.default.ids
   enable_irsa     = true
   vpc_id          = data.aws_vpc.default.id
-
   tags = {
-    cluster = "chatbot"
+    cluster = "starbucks"
   }
 
   eks_managed_node_group_defaults = {
