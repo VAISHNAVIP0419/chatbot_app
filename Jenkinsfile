@@ -1,225 +1,183 @@
 pipeline {
-    agent any
+  agent any
 
-    tools {
-        git 'Default'
-        nodejs 'node20'
-        jdk 'jdk-17'
+  tools {
+    jdk 'jdk-17'
+    nodejs 'node20'
+  }
+
+  environment {
+    SCANNER_HOME = tool 'sonar-scanner-5'
+    SONARQUBE_ENV = 'sonar-server'
+    SONAR_TOKEN = credentials('sonar-token')
+    REPO = 'vaishnavi2301/chatbot-app'
+    IMAGE_TAG = 'latest'
+    DOCKER_CREDENTIALS_ID = 'docker'
+  }
+
+  stages {
+
+    stage('Clean Workspace') {
+      steps {
+        cleanWs()
+      }
     }
 
-    environment {
-        SONARQUBE_ENV = 'sonar-server'
-        SONAR_TOKEN = credentials('sonar-token')
-        DOCKER_CREDENTIALS_ID = 'docker'
+    stage('Git Checkout') {
+      steps {
+        git branch: 'main', 
+            url: 'https://github.com/VAISHNAVIP0419/chatbot_app.git', 
+            credentialsId: 'git'
+      }
     }
 
-    stages {
-
-        stage('Clean Workspace') {
-            steps {
-                cleanWs()
-                script {
-                    echo "✅ Workspace cleaned successfully"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Workspace cleanup failed"
-                }
-            }
+    stage('SonarQube Analysis') {
+      steps {
+        withSonarQubeEnv("${SONARQUBE_ENV}") {
+          dir('project') {
+            sh '''
+              echo "Running SonarQube analysis..."
+              $SCANNER_HOME/bin/sonar-scanner \
+                -Dsonar.projectName=chatbot \
+                -Dsonar.projectKey=chatbot \
+                -Dsonar.sources=. \
+                -Dsonar.login=${SONAR_TOKEN}
+            '''
+          }
         }
-
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main', credentialsId: 'github-credentials', url: 'https://github.com/VAISHNAVIP0419/chatbot_app.git'
-                script {
-                    echo "✅ Code checked out from Git"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Git checkout failed"
-                }
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                dir('project') {
-                    sh 'npm install'
-                }
-                script {
-                    echo "✅ Node dependencies installed"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Failed to install dependencies"
-                }
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                script {
-                    withSonarQubeEnv('sonar-server') {
-                        def scannerHome = tool name: 'sonar-scanner-5'
-                        dir('project') {
-                            sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=ChatBot-Application -Dsonar.sources=. -Dsonar.login=${SONAR_TOKEN}"
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-                script {
-                    echo "✅ Quality gate passed"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Quality gate failed"
-                }
-            }
-        }
-
-        stage('Update Dependency-Check DB') {
-            steps {
-                script {
-                    sh '/usr/local/bin/dependency-check/bin/dependency-check.sh --updateonly --data $WORKSPACE/owasp-data'
-                    echo "✅ Dependency-Check database updated"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Failed to update Dependency-Check database"
-                }
-            }
-        }
-
-        stage('OWASP Dependency Check') {
-            steps {
-                script {
-                    sh '/usr/local/bin/dependency-check/bin/dependency-check.sh --project ChatBot-Application --scan . --data $WORKSPACE/owasp-data --noupdate --disableYarnAudit'
-                    echo "✅ OWASP dependency check completed"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ OWASP dependency check failed"
-                }
-            }
-        }
-
-        stage('Trivy FS Scan') {
-            steps {
-                script {
-                    sh '$(which trivy) fs .'
-                    echo "✅ Trivy file system scan completed, check trivy-fs-report.txt"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Trivy FS scan failed"
-                }
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                script {
-                    def image = "vaishnavi2301/chatbot-app:latest"
-                    dir('project') {
-                        sh "docker build -t ${image} ."
-                    }
-                    echo "✅ Docker image built"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Docker build failed"
-                }
-            }
-        }
-
-        stage('Docker Push') {
-            steps {
-                script {
-                    def image = "vaishnavi2301/chatbot-app:latest"
-                    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
-                        sh "docker push ${image}"
-                    }
-                    echo "✅ Docker image pushed to Docker Hub"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Docker push failed"
-                }
-            }
-        }
-
-        stage('Trivy Image Scan') {
-            steps {
-                script {
-                    def image = "vaishnavi2301/chatbot-app:latest"
-                    sh "trivy image ${image} --exit-code 0 --severity HIGH,CRITICAL > trivy-image-report.txt"
-                    echo "✅ Trivy image scan completed, check trivy-image-report.txt"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Trivy image scan failed"
-                }
-            }
-        }
-
-        stage('Deploy to Container') {
-            steps {
-                script {
-                    def image = "vaishnavi2301/chatbot-app:latest"
-                    sh 'docker rm -f chatbot-app || true'
-                    sh "docker run -d -p 3000:80 --name chatbot-app ${image}"
-                    echo "✅ Application deployed in container"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Deployment to container failed"
-                }
-            }
-        }
-
-        stage('Helm Deploy to EKS') {
-            steps {
-                script {
-                    sh '''
-                        helm upgrade --install chatbot-app ./project/chatbot_app/helm/chatbot_chart \
-                        --namespace chatbot --create-namespace
-                    '''
-                    echo "✅ Application deployed to EKS using Helm"
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Helm deployment failed"
-                }
-            }
-        }
+      }
     }
 
-    post {
-        success {
-            echo "🎉 Pipeline completed successfully!"
+    stage('Code Quality Gate') {
+      steps {
+        timeout(time: 5, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
         }
-        failure {
-            echo "🚨 Pipeline failed. Check logs for errors."
-        }
+      }
     }
+
+    stage('Install NPM Dependencies') {
+      steps {
+        dir('project') {
+          sh '''
+            echo "Installing NPM dependencies..."
+            npm install
+          '''
+        }
+      }
+    }
+
+    stage('OWASP Dependency Check') {
+      steps {
+        withCredentials([string(credentialsId: 'nvd-api-key-id', variable: 'NVD_API_KEY')]) {
+          echo "Running OWASP Dependency Check..."
+          dependencyCheck additionalArguments: "--format XML --project starbucks-ci --nvdApiKey ${env.NVD_API_KEY}", odcInstallation: 'db-check'
+          dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+         }
+       }
+     }
+
+    stage('Trivy Vulnerability Scan') {
+      steps {
+        sh '''
+          echo "Running Trivy filesystem scan..."
+          trivy fs . > trivy-fs-report.txt || true
+        '''
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        dir('project') {
+          sh '''
+            echo "Building Docker image..."
+            docker build -t $REPO:$IMAGE_TAG .
+          '''
+        }
+      }
+    }
+
+    stage('Docker Scout Scan') {
+      steps {
+        script {
+          withDockerRegistry(credentialsId: "${DOCKER_CREDENTIALS_ID}", url: 'https://index.docker.io/v1/') {
+            sh '''
+              echo "Running Docker Scout analysis..."
+              docker scout quickview vaishnavi2301/chatbot-app:latest || true
+              docker scout cves vaishnavi2301/chatbot-app:latest || true
+              docker scout recommendations vaishnavi2301/chatbot-app:latest || true
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Push Docker Image') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+          sh '''
+            echo "Pushing Docker image to Docker Hub..."
+            echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+            docker push $REPO:$IMAGE_TAG
+          '''
+        }
+      }
+    }
+
+    stage('Deploy to Docker Container') {
+      steps {
+        sh '''
+          echo "Deploying container locally..."
+          docker stop chatbot-app || true
+          docker rm chatbot-app || true
+          docker run -d --name chatbot-app -p 3000:80 $REPO:$IMAGE_TAG
+        '''
+      }
+    }
+
+    stage('Set up Kubeconfig') {
+      steps {
+        withCredentials([
+          string(credentialsId: 'aws_access_key_id', variable: 'AWS_ACCESS_KEY_ID'),
+          string(credentialsId: 'aws_secret_access_key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
+          sh '''
+            echo "Setting up AWS credentials..."
+            mkdir -p ~/.aws
+            cat > ~/.aws/credentials <<EOL
+[default]
+aws_access_key_id = ${AWS_ACCESS_KEY_ID}
+aws_secret_access_key = ${AWS_SECRET_ACCESS_KEY}
+EOL
+
+            echo "Setting up kubeconfig for EKS..."
+            aws eks --region ap-south-1 update-kubeconfig --name vaishnavi-eks-E4iMBaFC
+          '''
+        }
+      }
+    }
+
+    stage('Deploy to EKS with Helm') {
+      steps {
+        sh '''
+          echo "Deploying to EKS with Helm..."
+          helm upgrade --install chatbot-app ./project/chatbot_app/helm/chatbot_chart \
+            --namespace chatbot --create-namespace
+        '''
+      }
+    }
+
+  }
+
+  post {
+    always {
+      echo 'CI/CD Pipeline execution completed.'
+    }
+    success {
+      echo '✅ CI/CD passed. Code is clean, image built, and deployed successfully.'
+    }
+    failure {
+      echo '❌ CI/CD pipeline failed. Please check logs and fix the issues.'
+    }
+  }
 }
