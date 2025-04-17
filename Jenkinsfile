@@ -13,10 +13,10 @@ pipeline {
     REPO = 'vaishnavi2301/chatbot-app'
     IMAGE_TAG = 'latest'
     DOCKER_CREDENTIALS_ID = 'docker'
+    NVD_API_KEY = 'nvd-api-key-id'
   }
 
   stages {
-
     stage('Clean Workspace') {
       steps {
         cleanWs()
@@ -73,9 +73,9 @@ pipeline {
           echo "Running OWASP Dependency Check..."
           dependencyCheck additionalArguments: "--format XML --project starbucks-ci --nvdApiKey ${env.NVD_API_KEY}", odcInstallation: 'db-check'
           dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-         }
-       }
-     }
+        }
+      }
+    }
 
     stage('Trivy Vulnerability Scan') {
       steps {
@@ -151,21 +151,28 @@ aws_secret_access_key = ${AWS_SECRET_ACCESS_KEY}
 EOL
 
             echo "Setting up kubeconfig for EKS..."
-            aws eks --region ap-south-1 update-kubeconfig --name vaishnavi-eks-E4iMBaFC
+            aws eks --region ap-south-1 update-kubeconfig --name "vaishnavi-eks"
           '''
         }
       }
     }
 
-    stage('Deploy to EKS with Helm') {
-      steps {
-        sh '''
-          echo "Deploying to EKS with Helm..."
-          helm upgrade --install chatbot-app ./project/chatbot_app/helm/chatbot_chart \
-            --namespace chatbot --create-namespace
-        '''
-      }
+   stage('Deploy to EKS with Helm') {
+  steps {
+    dir('helm/chatbot_chart') {
+      sh '''
+        echo "Current directory:"
+        pwd
+        echo "Chart directory contents:"
+        ls -al
+
+        echo "Deploying to EKS with Helm..."
+        helm upgrade --install chatbot-app . \
+          --namespace chatbot --create-namespace
+      '''
     }
+  }
+}
 
   }
 
