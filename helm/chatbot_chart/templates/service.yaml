@@ -1,13 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: chatbot-service
+  name: {{ .Chart.Name }}-service
+  labels:
+    app: {{ .Chart.Name }}
 spec:
   type: {{ .Values.service.type }}
   selector:
-    app: chatbot
+    app: {{ .Chart.Name }}
   ports:
-    - protocol: TCP
+    - name: http
       port: {{ .Values.service.port }}
-      targetPort: 3000
-
+      targetPort: {{ .Values.service.targetPort }}
