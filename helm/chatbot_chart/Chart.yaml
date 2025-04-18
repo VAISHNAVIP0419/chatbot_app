@@ -1,6 +1,5 @@
 apiVersion: v2
 name: chatbot-chart
-description: A Helm chart for deploying Chatbot UI on Kubernetes
-type: application
+description: A Helm chart for chatbot app
 version: 0.1.0
 appVersion: "1.0"
