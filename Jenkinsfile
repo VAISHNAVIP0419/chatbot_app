@@ -7,13 +7,13 @@ pipeline {
   }
 
   environment {
-    SCANNER_HOME = tool 'sonar-scanner-5'
+    SCANNER_HOME = tool 'sonar-scanner'
     SONARQUBE_ENV = 'sonar-server'
     SONAR_TOKEN = credentials('sonar-token')
     REPO = 'vaishnavi2301/chatbot-app'
     IMAGE_TAG = 'latest'
     DOCKER_CREDENTIALS_ID = 'docker'
-    NVD_API_KEY = 'nvd-api-key-id'
+    NVD_API_KEY = credentials('nvd-api-key-id')
   }
 
   stages {
@@ -69,11 +69,11 @@ pipeline {
 
     stage('OWASP Dependency Check') {
       steps {
-        withCredentials([string(credentialsId: 'nvd-api-key-id', variable: 'NVD_API_KEY')]) {
-          echo "Running OWASP Dependency Check..."
-          dependencyCheck additionalArguments: "--format XML --project starbucks-ci --nvdApiKey ${env.NVD_API_KEY}", odcInstallation: 'db-check'
-          dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-        }
+        dependencyCheck(
+          additionalArguments: "--format XML --project chatbot-ci --nvdApiKey ${NVD_API_KEY}",
+          odcInstallation: 'db-check'
+        )
+        dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
       }
     }
 
